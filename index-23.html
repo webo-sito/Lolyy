@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<!--
+  ROMANTIC GIFT WEBSITE — single page, self-contained.
+  ----------------------------------------------------
+  HOW TO CUSTOMIZE:
+  Scroll to the <script> at the bottom and edit the CONFIG object.
+  That's the only place you need to touch for text, the passcode,
+  and the audio file path. Everything else renders itself.
+
+  Supports Arabic just as well as English — the fonts already include
+  Arabic glyphs. To switch, change lang="en" to lang="ar" and add
+  dir="rtl" on the <html> tag below, then edit the CONFIG strings.
+
+  GITHUB PAGES:
+  This file is named index.html on purpose — push it to a repo, enable
+  Pages, and it's live at the root URL. Put the song and the cover photo
+  in the SAME repo folder as this file (filenames matching CONFIG.audioSrc
+  / CONFIG.albumArt below), then push all three together. Any common
+  audio format works — mp3, m4a, or an mp4/aac audio export.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>For You</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A4%8D%3C/text%3E%3C/svg%3E">
+
+<!-- Fonts: elegant serif for display, clean sans for body — both cover Arabic + Latin glyphs -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,500&family=Amiri:ital@0;1&family=Poppins:wght@300;400;500;600&family=Tajawal:wght@300;400;500&display=swap" rel="stylesheet">
+
+
+<style>
+  :root{
+    --bg-deep:#170a10;
+    --bg-mid:#2b0f1c;
+    --rose:#e8637f;
+    --rose-deep:#7a1f3d;
+    --gold:#d9a566;
+    --cream:#f7e9df;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background:linear-gradient(180deg,var(--bg-deep) 0%,var(--bg-mid) 60%,var(--bg-deep) 100%);
+    color:var(--cream);
+    font-family:'Poppins','Tajawal',sans-serif;
+    scroll-behavior:smooth;
+    overflow-x:hidden;
+  }
+  body.locked{ overflow:hidden; height:100vh; }
+
+  .font-display{ font-family:'Playfair Display','Amiri',serif; }
+
+  /* ---------- ambient canvas (always on, sits behind everything) ---------- */
+  #hearts-canvas{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+
+  /* ---------- glow overlay used for the audio-triggered FX ---------- */
+  #glow-overlay{
+    position:fixed; inset:0; z-index:4; pointer-events:none; opacity:0;
+    background:radial-gradient(circle at 50% 40%, rgba(232,99,127,.35), transparent 60%);
+  }
+  #glow-overlay.pulse{ animation:glowPulse 1.9s ease-out; }
+  #glow-overlay.breathing{ animation:breathe 6s ease-in-out infinite; }
+  @keyframes glowPulse{ 0%{opacity:0;} 25%{opacity:.65;} 100%{opacity:0;} }
+  @keyframes breathe{ 0%,100%{opacity:.05;} 50%{opacity:.18;} }
+
+  /* ---------- loader + lock gate ---------- */
+  #loader, #lock-gate{
+    position:fixed; inset:0; z-index:20;
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    text-align:center; padding:24px;
+    background:rgba(23,10,16,.88);
+  }
+  .eyebrow{ font-size:.75rem; letter-spacing:.3em; text-transform:uppercase; color:var(--gold); opacity:.85; margin-bottom:14px; }
+
+  #loader-name{ font-size:clamp(2.4rem,8vw,4.4rem); font-style:italic; position:relative; }
+  .name-glow{ position:absolute; inset:-50px; background:radial-gradient(circle, rgba(232,99,127,.45), transparent 70%); filter:blur(34px); z-index:-1; }
+  .loader-hint{ margin-top:18px; font-size:.75rem; opacity:.4; }
+
+  /* Loader intro fade — plain CSS on purpose, so the loader never depends on an external script loading successfully */
+  .intro-fade{ animation:fadeInEl 1s ease both; }
+
+  .lock-card{
+    width:100%; max-width:360px;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.14);
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    border-radius:28px; padding:38px 28px;
+    box-shadow:0 30px 60px -30px rgba(0,0,0,.6);
+  }
+  #passcode-input{
+    width:100%; text-align:center; letter-spacing:.6em; font-size:1.3rem;
+    background:transparent; border:none; border-bottom:2px solid rgba(255,255,255,.25);
+    color:var(--cream); padding:10px 0; outline:none; font-family:'Poppins',sans-serif;
+    transition:border-color .25s;
+  }
+  #passcode-input:focus{ border-color:var(--rose); }
+  #lock-hint{ margin-top:12px; font-size:.72rem; opacity:.45; }
+
+  #unlock-btn{
+    margin-top:22px; width:100%; padding:14px; border:none; border-radius:16px;
+    background:linear-gradient(135deg,var(--rose),var(--rose-deep)); color:#fff;
+    font-weight:600; letter-spacing:.02em; cursor:pointer;
+    transition:transform .15s, box-shadow .2s;
+  }
+  #unlock-btn:hover{ transform:translateY(-2px); box-shadow:0 12px 30px -10px rgba(232,99,127,.6); }
+  #unlock-btn:active{ transform:scale(.97); }
+
+  #lock-error{ margin-top:14px; font-size:.8rem; color:var(--rose); opacity:0; height:0; }
+  #lock-error.show{ opacity:.9; height:auto; }
+  .shake{ animation:shake .4s; }
+  @keyframes shake{ 20%,60%{ transform:translateX(-6px); } 40%,80%{ transform:translateX(6px); } }
+
+  /* unlock burst ring */
+  .burst{
+    position:fixed; top:50%; left:50%; width:10px; height:10px; border-radius:50%;
+    background:radial-gradient(circle, rgba(255,255,255,.95), var(--rose) 40%, transparent 72%);
+    transform:translate(-50%,-50%); z-index:30; pointer-events:none;
+  }
+  .burst.animate{ animation:burstExpand 1s ease-out forwards; }
+  @keyframes burstExpand{ to{ width:1500px; height:1500px; opacity:0; } }
+
+  /* ---------- main content ---------- */
+  main#main-content{ position:relative; z-index:1; }
+  section{
+    position:relative; min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:100px 24px; text-align:center;
+  }
+
+  #hero h1{ font-size:clamp(2.2rem,7vw,4rem); font-style:italic; }
+  #hero .sub{ margin-top:16px; opacity:.72; max-width:32ch; }
+
+  .scroll-cue{ position:absolute; bottom:36px; left:50%; transform:translateX(-50%); opacity:.55; animation:bounce 2s infinite; }
+  @keyframes bounce{ 0%,100%{ transform:translate(-50%,0); } 50%{ transform:translate(-50%,10px); } }
+
+  .divider-heart{ width:24px; height:24px; position:relative; transform:rotate(-45deg); background:var(--rose); margin:6px auto; }
+  .divider-heart::before,.divider-heart::after{ content:''; position:absolute; width:24px; height:24px; border-radius:50%; background:inherit; }
+  .divider-heart::before{ top:-12px; left:0; }
+  .divider-heart::after{ top:0; left:12px; }
+
+  #notes-container{ display:flex; flex-direction:column; gap:26px; max-width:560px; width:100%; }
+  .note-card{
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1);
+    border-radius:24px; padding:34px 28px;
+    transition:transform .35s ease, box-shadow .35s ease, border-color .35s ease;
+    will-change:transform;
+  }
+  .note-card:hover{ box-shadow:0 20px 50px -25px rgba(232,99,127,.5); border-color:rgba(232,99,127,.45); }
+  .note-card h3{ font-family:'Playfair Display','Amiri',serif; font-style:italic; font-size:1.4rem; color:var(--gold); margin-bottom:10px; }
+  .note-card p{ opacity:.85; line-height:1.85; font-size:.95rem; }
+
+  #closing .sign-line{ font-family:'Playfair Display','Amiri',serif; font-style:italic; font-size:1.3rem; opacity:.9; }
+  #closing .sign-name{ margin-top:6px; font-size:1rem; opacity:.6; }
+  #closing footer{ margin-top:60px; font-size:.72rem; opacity:.35; }
+
+  /* elements animated in on scroll (see initScrollAnimations) */
+  .reveal{ opacity:0; }
+
+  /* ---------- floating mini player ---------- */
+  #mini-player{
+    position:fixed; bottom:20px; left:50%; z-index:15;
+    width:min(320px,90vw);
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14);
+    backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    border-radius:20px; padding:12px 16px;
+    display:flex; align-items:center; gap:12px;
+    box-shadow:0 20px 45px -20px rgba(0,0,0,.6);
+    transform:translate(-50%,0); transition:transform .5s ease, opacity .5s ease;
+  }
+  #mini-player.hidden-player{ transform:translate(-50%,140%); opacity:0; }
+
+  #album-art{
+    width:44px; height:44px; border-radius:50%; flex-shrink:0;
+    background:linear-gradient(135deg,var(--rose),var(--gold));
+    display:flex; align-items:center; justify-content:center; font-size:1.1rem;
+    position:relative; overflow:hidden;
+    box-shadow:0 0 0 2px rgba(255,255,255,.15), 0 4px 10px rgba(0,0,0,.35);
+  }
+  /* the cover photo itself — spins like a CD while the song is playing */
+  #album-art img{
+    width:100%; height:100%; object-fit:cover; border-radius:50%; display:block;
+    animation:spin 6s linear infinite;
+    animation-play-state:paused; /* starts paused, JS resumes it on play */
+  }
+  /* small centre hole, like a real disc */
+  #album-art::after{
+    content:''; position:absolute; top:50%; left:50%; width:8px; height:8px;
+    background:var(--bg-deep); border-radius:50%; transform:translate(-50%,-50%);
+    box-shadow:0 0 0 1px rgba(255,255,255,.25); z-index:2; pointer-events:none;
+  }
+  @keyframes spin{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+  #track-info{ flex:1; min-width:0; text-align:left; }
+  #track-title{ font-size:.83rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #track-artist{ font-size:.7rem; opacity:.55; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  #play-btn{
+    width:36px; height:36px; border-radius:50%; border:none; background:var(--rose); color:#fff;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+    transition:transform .15s;
+  }
+  #play-btn:hover{ transform:scale(1.08); }
+
+  #progress-track{
+    position:absolute; bottom:0; left:0; right:0; height:3px;
+    background:rgba(255,255,255,.12); border-radius:0 0 20px 20px; overflow:hidden; cursor:pointer;
+  }
+  #progress-fill{ height:100%; width:0%; background:linear-gradient(90deg,var(--rose),var(--gold)); }
+
+  .hidden{ display:none !important; }
+  .fade-out{ animation:fadeOutEl .55s forwards; }
+  .fade-in{ animation:fadeInEl .8s ease forwards; }
+  @keyframes fadeOutEl{ to{ opacity:0; } }
+  @keyframes fadeInEl{ from{ opacity:0; transform:translateY(16px); } to{ opacity:1; transform:translateY(0); } }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+  }
+</style>
+</head>
+<body class="locked">
+
+  <!-- Ambient particle background, visible through every screen -->
+  <canvas id="hearts-canvas"></canvas>
+  <div id="glow-overlay"></div>
+
+  <!-- ============ 1. LOADER ============ -->
+  <div id="loader">
+    <p class="eyebrow intro-fade" style="animation-delay:.1s">a little something for</p>
+    <h1 id="loader-name" class="font-display intro-fade" style="animation-delay:.35s">
+      <span class="name-glow"></span>
+    </h1>
+    <p class="loader-hint intro-fade" style="animation-delay:.7s">tap anywhere to continue</p>
+  </div>
+
+  <!-- ============ 2. LOCK GATE ============ -->
+  <div id="lock-gate" class="hidden">
+    <div class="lock-card">
+      <p class="eyebrow">enter the passcode</p>
+      <input id="passcode-input" type="text" inputmode="text" autocomplete="off" placeholder="••••">
+      <p id="lock-hint"></p>
+      <button id="unlock-btn">Unlock ✨</button>
+      <p id="lock-error">that's not quite it — try again 🤍</p>
+    </div>
+  </div>
+
+  <!-- ============ 3. MAIN CONTENT ============ -->
+  <main id="main-content" class="hidden">
+
+    <section id="hero">
+      <p class="eyebrow reveal">for you</p>
+      <h1 class="font-display reveal" id="hero-title">Everything good in my life has your fingerprints on it.</h1>
+      <p class="sub reveal" id="hero-sub">A small, lasting keepsake — made just for you.</p>
+      <div class="scroll-cue">↓</div>
+    </section>
+
+    <section id="notes">
+      <p class="eyebrow reveal">a few things I never say enough</p>
+      <div id="notes-container"><!-- love-note cards are injected here by CONFIG.loveNotes --></div>
+    </section>
+
+    <section id="closing">
+      <div class="divider-heart reveal"></div>
+      <p class="sign-line reveal" id="closing-line">Forever yours,</p>
+      <p class="sign-name reveal" id="signature">— Me</p>
+      <footer>made with ♥ · a keepsake, not a product</footer>
+    </section>
+
+  </main>
+
+  <!-- ============ 4. FLOATING MINI PLAYER ============ -->
+  <div id="mini-player" class="hidden hidden-player">
+    <div id="album-art"><img id="album-art-img" src="" alt="" onerror="this.style.display='none'"></div>
+    <div id="track-info">
+      <div id="track-title">Track</div>
+      <div id="track-artist">Artist</div>
+    </div>
+    <button id="play-btn" aria-label="Play"></button>
+    <div id="progress-track"><div id="progress-fill"></div></div>
+  </div>
+  <audio id="bg-audio" loop preload="none"></audio>
+
+  <!-- GSAP + ScrollTrigger + Lenis (smooth scroll). All guarded below in case a CDN is blocked. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.14/dist/lenis.min.js"></script>
+
+  <script>
+  // ============================================================
+  // CONFIG — this is the only section you need to edit
+  // ============================================================
+  const CONFIG = {
+    herName:   "Habibti",                 // shown on the loading screen
+    passcode:  "0101",                    // her birthday (e.g. "0906") or a secret word — not case sensitive
+    lockHint:  "hint: our special date 💫",
+    audioSrc:  "song.mp3",                // song file — mp3, m4a, or mp4/aac audio all work, just match the filename
+    albumArt:  "cover.jpg",               // the cover photo — spins like a CD while the song plays
+    trackTitle:  "Men Gheir Kalam",
+    trackArtist: "TUL8TE",
+    heroTitle: "Everything good in my life has your fingerprints on it.",
+    heroSub:   "A small, lasting keepsake — made just for you.",
+    loveNotes: [
+      { title: "Her Smile",  text: "The kind that turns an ordinary moment into the best part of my day." },
+      { title: "Her Heart",  text: "Gentle, fierce, and endlessly kind — the safest place I know." },
+      { title: "Us",         text: "Every version of forward I imagine, I imagine it with you in it." }
+    ],
+    closingLine: "Forever yours,",
+    signature:   "— Me"
+  };
+
+  // ============================================================
+  // Populate the page from CONFIG
+  // ============================================================
+  document.getElementById('loader-name').prepend(document.createTextNode(CONFIG.herName));
+  document.getElementById('lock-hint').textContent = CONFIG.lockHint;
+  document.getElementById('hero-title').textContent = CONFIG.heroTitle;
+  document.getElementById('hero-sub').textContent = CONFIG.heroSub;
+  document.getElementById('track-title').textContent = CONFIG.trackTitle;
+  document.getElementById('track-artist').textContent = CONFIG.trackArtist;
+  document.getElementById('closing-line').textContent = CONFIG.closingLine;
+  document.getElementById('signature').textContent = CONFIG.signature;
+  document.getElementById('bg-audio').src = CONFIG.audioSrc;
+  document.getElementById('album-art-img').src = CONFIG.albumArt;
+
+  const notesContainer = document.getElementById('notes-container');
+  CONFIG.loveNotes.forEach(note => {
+    const card = document.createElement('div');
+    card.className = 'note-card reveal';
+    card.innerHTML = `<h3>${note.title}</h3><p>${note.text}</p>`;
+    notesContainer.appendChild(card);
+  });
+
+  // ============================================================
+  // Ambient hearts particle system — plain Canvas, no library
+  // ============================================================
+  const canvas = document.getElementById('hearts-canvas');
+  const ctx = canvas.getContext('2d');
+  let w, h;
+  function resize(){ w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const heartColors = ['#e8637f', '#d9a566', '#f2a4b5'];
+
+  class Heart{
+    // mode: 'initial' (scattered on screen at load, so hearts are visible right away),
+    //       'loop'    (respawns just below the fold once a heart drifts off the top),
+    //       'burst'   (celebratory pulse on unlock / first play)
+    constructor(mode){ this.reset(mode); }
+    reset(mode){
+      this.burst = mode === 'burst';
+      this.x = Math.random() * w;
+      if (mode === 'initial')      this.y = Math.random() * h;             // scattered across the visible screen immediately
+      else if (this.burst)         this.y = h/2 + (Math.random()*120 - 60);
+      else /* loop */              this.y = h + Math.random()*60;          // just below the fold, not way off-screen
+      this.size = 6 + Math.random() * (this.burst ? 16 : 10);
+      this.speed = (this.burst ? 2.6 : 0.55) + Math.random() * (this.burst ? 2.2 : 0.6);
+      this.drift = Math.random()*0.6 - 0.3;
+      this.phase = Math.random()*Math.PI*2;
+      this.opacity = mode === 'initial' ? (0.1 + Math.random()*0.2) : 0; // already partly visible on load, not fading in from zero
+      this.maxOpacity = 0.22 + Math.random()*0.35;
+      this.color = heartColors[Math.floor(Math.random()*heartColors.length)];
+    }
+    update(){
+      this.y -= this.speed;
+      this.x += Math.sin(this.y*0.01 + this.phase) * this.drift;
+      if (this.opacity < this.maxOpacity) this.opacity += 0.012;
+      if (this.burst) this.opacity -= 0.008;
+      if (this.opacity <= 0 && this.burst) return false;
+      if (this.y < -30 && !this.burst) this.reset('loop');
+      return true;
+    }
+    draw(){
+      ctx.save();
+      ctx.globalAlpha = Math.max(this.opacity, 0);
+      ctx.translate(this.x, this.y);
+      ctx.scale(this.size/16, this.size/16);
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.moveTo(0, 4);
+      ctx.bezierCurveTo(0, -2, -8, -2, -8, 4);
+      ctx.bezierCurveTo(-8, 10, 0, 14, 0, 18);
+      ctx.bezierCurveTo(0, 14, 8, 10, 8, 4);
+      ctx.bezierCurveTo(8, -2, 0, -2, 0, 4);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  let hearts = [];
+  const baseCount = reduceMotion ? 12 : 30;
+  for (let i = 0; i < baseCount; i++) hearts.push(new Heart('initial'));
+
+  function spawnBurst(n){
+    for (let i = 0; i < n; i++) hearts.push(new Heart('burst'));
+  }
+
+  function animate(){
+    // low-alpha fill instead of clearRect => soft trailing glow behind each heart
+    ctx.fillStyle = 'rgba(23,10,16,0.22)';
+    ctx.fillRect(0, 0, w, h);
+    hearts = hearts.filter(hrt => {
+      const alive = hrt.update();
+      if (alive) hrt.draw();
+      return alive;
+    });
+    requestAnimationFrame(animate);
+  }
+  animate();
+
+  // ============================================================
+  // Entry sequence: loader -> lock gate -> unlock -> reveal page
+  // ============================================================
+  const loader     = document.getElementById('loader');
+  const lockGate    = document.getElementById('lock-gate');
+  const mainContent = document.getElementById('main-content');
+  const miniPlayer  = document.getElementById('mini-player');
+  const passInput   = document.getElementById('passcode-input');
+  const unlockBtn   = document.getElementById('unlock-btn');
+  const lockError   = document.getElementById('lock-error');
+  const lockCard    = document.querySelector('.lock-card');
+
+  // Loader intro fade is plain CSS now (.intro-fade), so nothing above this
+  // point depends on an external script — the tap-to-continue handler below
+  // always attaches, even if a CDN is slow, blocked, or unreachable.
+
+  let advanced = false;
+  function showLockGate(){
+    if (advanced) return;
+    advanced = true;
+    loader.classList.add('fade-out');
+    setTimeout(() => {
+      loader.classList.add('hidden');
+      lockGate.classList.remove('hidden');
+      lockGate.classList.add('fade-in');
+    }, 550);
+  }
+  // Any interaction at all moves past the loader — tap, swipe/scroll, or a key press
+  ['click','touchstart','wheel','scroll','keydown'].forEach(evt =>
+    window.addEventListener(evt, showLockGate, { passive: true })
+  );
+  setTimeout(showLockGate, 1800); // and it opens on its own either way, no interaction required
+
+  function triggerUnlockBurst(){
+    const b = document.createElement('div');
+    b.className = 'burst';
+    document.body.appendChild(b);
+    requestAnimationFrame(() => b.classList.add('animate'));
+    setTimeout(() => b.remove(), 1100);
+    spawnBurst(24);
+  }
+
+  function unlock(){
+    triggerUnlockBurst();
+    lockGate.classList.add('fade-out');
+    setTimeout(() => {
+      lockGate.classList.add('hidden');
+      document.body.classList.remove('locked');
+      mainContent.classList.remove('hidden');
+      mainContent.classList.add('fade-in');
+      try { initScrollAnimations(); } catch (err) { console.warn('Scroll animation setup skipped:', err); }
+      setTimeout(() => {
+        miniPlayer.classList.remove('hidden');
+        requestAnimationFrame(() => miniPlayer.classList.remove('hidden-player'));
+      }, 500);
+    }, 550);
+  }
+
+  function tryUnlock(){
+    const val = passInput.value.trim().toLowerCase();
+    if (val === String(CONFIG.passcode).toLowerCase()) {
+      unlock();
+    } else {
+      lockError.classList.add('show');
+      lockCard.classList.remove('shake');
+      void lockCard.offsetWidth; // restart animation
+      lockCard.classList.add('shake');
+    }
+  }
+  unlockBtn.addEventListener('click', tryUnlock);
+  passInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+
+  // ============================================================
+  // Scroll reveals + smooth scrolling (runs once, after unlock)
+  // ============================================================
+  function initScrollAnimations(){
+    try {
+      if (window.Lenis) {
+        const lenis = new Lenis({ duration: 1.1, smoothWheel: true });
+        if (window.gsap && window.ScrollTrigger) {
+          lenis.on('scroll', ScrollTrigger.update);
+          gsap.ticker.add(time => lenis.raf(time * 1000));
+          gsap.ticker.lagSmoothing(0);
+        } else {
+          function raf(time){ lenis.raf(time); requestAnimationFrame(raf); }
+          requestAnimationFrame(raf);
+        }
+      }
+    } catch (err) { console.warn('Smooth scroll (Lenis) skipped:', err); }
+
+    try {
+      if (window.gsap && window.ScrollTrigger) {
+        gsap.registerPlugin(ScrollTrigger);
+        gsap.utils.toArray('.reveal').forEach(el => {
+          gsap.fromTo(el, { opacity: 0, y: 40 }, {
+            opacity: 1, y: 0, duration: 1, ease: 'power2.out',
+            scrollTrigger: { trigger: el, start: 'top 85%' }
+          });
+        });
+      } else {
+        // fallback: just show everything if GSAP failed to load
+        document.querySelectorAll('.reveal').forEach(el => el.style.opacity = 1);
+      }
+    } catch (err) {
+      console.warn('Scroll reveal animation skipped:', err);
+      document.querySelectorAll('.reveal').forEach(el => el.style.opacity = 1);
+    }
+
+    // subtle tilt micro-interaction on note cards, desktop only
+    if (window.matchMedia('(hover: hover)').matches) {
+      document.querySelectorAll('.note-card').forEach(card => {
+        card.addEventListener('mousemove', e => {
+          const r = card.getBoundingClientRect();
+          const px = (e.clientX - r.left) / r.width - 0.5;
+          const py = (e.clientY - r.top) / r.height - 0.5;
+          card.style.transform = `translateY(-4px) rotateX(${py * -6}deg) rotateY(${px * 6}deg)`;
+        });
+        card.addEventListener('mouseleave', () => { card.style.transform = ''; });
+      });
+    }
+  }
+
+  // ============================================================
+  // Spotify-style mini player
+  // ============================================================
+  const audio         = document.getElementById('bg-audio');
+  const playBtn        = document.getElementById('play-btn');
+  const progressTrack   = document.getElementById('progress-track');
+  const progressFill    = document.getElementById('progress-fill');
+  const glowOverlay      = document.getElementById('glow-overlay');
+  const albumArtImg    = document.getElementById('album-art-img');
+  let hasTriggeredFX = false;
+
+  function setPlayIcon(isPlaying){
+    playBtn.innerHTML = isPlaying
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>';
+  }
+  setPlayIcon(false);
+
+  playBtn.addEventListener('click', () => {
+    if (audio.paused) {
+      audio.play().catch(() => {
+        console.warn('Add your song file and set CONFIG.audioSrc to enable playback.');
+      });
+      setPlayIcon(true);
+      albumArtImg.style.animationPlayState = 'running';
+      glowOverlay.classList.add('breathing');
+      if (!hasTriggeredFX) {
+        hasTriggeredFX = true;
+        glowOverlay.classList.add('pulse');
+        spawnBurst(16);
+        setTimeout(() => glowOverlay.classList.remove('pulse'), 1900);
+      }
+    } else {
+      audio.pause();
+      setPlayIcon(false);
+      albumArtImg.style.animationPlayState = 'paused';
+      glowOverlay.classList.remove('breathing');
+    }
+  });
+
+  audio.addEventListener('timeupdate', () => {
+    if (audio.duration) progressFill.style.width = (audio.currentTime / audio.duration * 100) + '%';
+  });
+
+  progressTrack.addEventListener('click', e => {
+    const r = progressTrack.getBoundingClientRect();
+    const ratio = (e.clientX - r.left) / r.width;
+    if (audio.duration) audio.currentTime = ratio * audio.duration;
+  });
+  </script>
+
+</body>
+</html>
